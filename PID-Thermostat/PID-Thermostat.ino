@@ -1,3 +1,12 @@
+/*
+This program implements PID control on an Eibos Easdry filament dryer with
+two digital potentiometers for control of the ceramic heater, an AHT10 temp/
+humidity sensor for monitoring and feedback, and an oled display and 
+potentiometer for user control of temperature setpoint.
+
+Author: @0uincy
+*/
+
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <Wire.h>
@@ -8,19 +17,21 @@
 // Create the display object using the SH1106 constructor for I2C
 U8G2_SH1106_128X64_NONAME_F_HW_I2C display(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
-// Create the sensor object
+// Create temp/humidity sensor object
 Adafruit_AHTX0 aht;
 
 // Define digital potentiometer control pins
 #define UDPIN 12
 #define CSPIN 13
 #define INCPIN 14
+
+// Define X9C104 digital potentiometer
 LapX9C10X heat(INCPIN, UDPIN, CSPIN, LAPX9C10X_X9C104);
 
 // Define PID constants
-double Kp = 0.5;  // Proportional constant
-double Ki = 0.1;  // Integral constant
-double Kd = 0.1;  // Derivative constant
+double Kp = 0.8;  // Proportional constant
+double Ki = 0.0;  // Integral constant
+double Kd = 0.4;  // Derivative constant
 
 // Define PID variables
 double input, output, setpoint;
@@ -30,27 +41,28 @@ unsigned long targetTemp = 30;
 int potPin = 0;
 int potValue = 0;
 int wiper = 0;
-int heatOutput = 99;
 
 void setup() {
-  display.begin();  // Initialize the display
+  display.begin();
+
+  // Check for temp/humidity sensor I2C connection
   if (!aht.begin()) {
     display.clearBuffer();          
     display.setFont(u8g2_font_luRS10_tf);
     display.drawStr(0, 10, "AHT10 not found!");
     display.sendBuffer();
-    while(1);  // Stay here forever if the sensor is not found
+    while(1);
   }
 
   // Read values from the sensor
   sensors_event_t humidity, temp;
   aht.getEvent(&humidity, &temp);
 
-  // Initialize the PID
-  input = temp.temperature; // Read initial temperature
+  // Initialize PID control
+  input = temp.temperature;
   myPID.SetMode(AUTOMATIC);
-  myPID.SetOutputLimits(0, 99); // Output range for digital potentiometer (0-100 for percentage)
-  setpoint = targetTemp; // Set the target temperature
+  myPID.SetOutputLimits(0, 99);
+  setpoint = targetTemp;
 
   // Initialize X9C104 
   heat.begin(0);
@@ -72,8 +84,7 @@ void loop() {
   setpoint = targetTemp;
   input = temp.temperature;
   myPID.Compute();
-  heatOutput = 99 - output;
-  heat.set(heatOutput);
+  heat.set(static_cast<int>(output));
   wiper = heat.get();
 
   // Print temperature and PID output for debugging
